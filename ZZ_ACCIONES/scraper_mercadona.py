@@ -5,172 +5,134 @@ import time
 from decimal import Decimal
 import sys
 
-# 1. CONFIGURACIÓN
+# SETUP
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'qome_backend.settings')
 django.setup()
 
 from core.models import Supermercado, IngredienteBase, ProductoReal
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json'
-}
-COOKIES = {'postalCode': '28001', 'warehouseId': '482'}
+# --- CONFIGURACIÓN V3 ---
+HEADERS = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
 
-# 2. MAPA DE CATEGORÍAS
-MAPA_CATEGORIAS = {
-    "pollo": 38, "pechuga": 38, "muslo": 38, "alas": 38,
-    "ternera": 44, "picada": 44, "hamburguesa": 44,
-    "cerdo": 37, "lomo": 37,
-    "pescado": 31, "salmón": 31, "merluza": 34, "bacalao": 33, "atún": 122,
-    "arroz": 118, "pasta": 120, "legumbre": 121, "garbanzo": 121, "lenteja": 121,
-    "aceite": 112, "vinagre": 112, "sal": 112, "especia": 115, "pimienta": 115,
-    "harina": 69, "pan": 60, "azucar": 85,
-    "conserva": 122, "tomate frito": 126, "salsa": 117, "soja": 117,
-    "cacao": 86, "café": 83, "avena": 78, "cereales": 78,
-    "mantequilla": 75, "cacahuete": 92, "frutos secos": 133, "quinoa": 118,
-    "aguacate": 27, "nueces": 133,
-    "huevos": 77, "leche": 72, "yogur": 109,
-    "fruta": 27, "plátano": 27, "manzana": 27, "limón": 27, "naranja": 27,
-    "verdura": 29, "lechuga": 28, "ensalada": 28, "tomate": 29, 
-    "cebolla": 29, "patata": 29, "ajo": 29, "pimiento": 29, 
-    "calabacín": 29, "brócoli": 29, "zanahoria": 29, "espinacas": 28, "champiñones": 29,
-    "tofu": 142, "vegetariano": 142
+# 1. MAPA DE CATEGORÍAS (Añadida SAL y WEB ID de Mercadona)
+MAPA_CATEGORIAS_IDS = {
+    # Carniceria / Pescaderia
+    "pollo": 38, "ternera": 44, "cerdo": 37, 
+    # Despensa
+    "arroz": 118, "pasta": 120, "aceite": 112, "sal": 112, "atún": 122, "tomate": 126, # 126 es tomate frito/salsas
+    # Frescos
+    "huevos": 77, "leche": 72, "patata": 29, "lechuga": 28, "cebolla": 29, "ajo": 29, 
+    "fruta": 27
 }
 
-# 3. FILTROS BÁSICOS
-KEYWORDS_ESENCIALES = {
-    "Arroz Precocinado": ["vasito", "microondas", "cocido", "listo"],
-    "Arroz": ["arroz"],
-    "Pollo": ["pollo", "pechuga", "muslo", "filete"],
-    "Ternera": ["ternera", "vacuno", "añojo", "burger"],
-    "Huevos": ["huevo"],
-    "Leche": ["leche"],
-    "Yogur": ["yogur"],
-    "Aceite": ["aceite"],
-    "Salsa de Soja": ["soja"],
-    "Avena": ["avena"],
-    "Pasta": ["pasta", "macarrón", "espagueti", "fideo", "hélice", "plumas"],
-    "Atún Lata": ["atún"],
-    "Salmón": ["salmón"],
-    "Merluza": ["merluza"],
-    "Tofu": ["tofu"],
+# 2. DICCIONARIO DE TRADUCCIÓN (Receta -> Búsqueda Flexible)
+# Si la receta dice "Aceite Oliva", buscamos que tenga "aceite" Y "oliva" (ignorando el "de")
+KEYWORDS_FLEXIBLES = {
+    "Aceite Oliva": ["aceite", "oliva"],
+    "Ternera Picada": ["picada", "vacuno"], # Ojo: Mercadona usa "Vacuno" a veces en vez de Ternera
+    "Atún Lata": ["atún", "aceite"], # O "natural"
     "Tomate Frito": ["tomate", "frito"],
-    "Cacao": ["cacao"],
-    "Crema Cacahuete": ["cacahuete"]
+    "Sal": ["sal", "mesa"], # Sal de mesa
+    "Lechuga": ["lechuga", "iceberg"],
+    "Pasta": ["macarrón", "plumas", "spaghetti", "pasta"], # Aceptamos cualquier tipo
 }
 
-GLOBAL_BAN = ["comida para", "gato", "perro", "mascota", "infantil", "bebé", "corporal", "champú"]
-
-def obtener_productos_categoria(cat_id):
-    url = f"https://tienda.mercadona.es/api/categories/{cat_id}/"
+def obtener_productos(cat_id):
     try:
-        r = requests.get(url, headers=HEADERS, cookies=COOKIES)
-        if r.status_code != 200: return []
+        url = f"https://tienda.mercadona.es/api/categories/{cat_id}/?lang=es"
+        r = requests.get(url, headers=HEADERS)
         data = r.json()
         productos = []
         def extraer(nodo):
             if 'products' in nodo: productos.extend(nodo['products'])
-            if 'categories' in nodo:
+            if 'categories' in nodo: 
                 for sub in nodo['categories']: extraer(sub)
         extraer(data)
         return productos
-    except: return []
+    except Exception as e: 
+        print(f"Error red: {e}")
+        return []
 
-def validar_basico(nombre_prod, nombre_ingrediente):
-    nombre_lower = nombre_prod.lower()
-    if any(ban in nombre_lower for ban in GLOBAL_BAN): return False
+def cumple_criterios(nombre_producto, nombre_ingrediente_base):
+    nombre_prod = nombre_producto.lower()
+    nombre_ing = nombre_ingrediente_base.lower()
+
+    # 1. Búsqueda por Keywords Flexibles
+    if nombre_ingrediente_base in KEYWORDS_FLEXIBLES:
+        palabras_clave = KEYWORDS_FLEXIBLES[nombre_ingrediente_base]
+        # Deben estar TODAS las palabras clave (ej: "aceite" Y "oliva")
+        return all(k in nombre_prod for k in palabras_clave)
     
-    keywords = None
-    for k, v in KEYWORDS_ESENCIALES.items():
-        if k.lower() in nombre_ingrediente.lower():
-            keywords = v
-            break
-            
-    if keywords:
-        if not any(k in nombre_lower for k in keywords):
-            return False
-    elif nombre_ingrediente.lower() not in nombre_lower:
-        if nombre_ingrediente.lower()[:-1] not in nombre_lower: 
-            return False
-
-    return True
+    # 2. Búsqueda Default (Contiene string literal)
+    return nombre_ing in nombre_prod
 
 def ejecutar_robot():
-    print("🤖 Iniciando Scraper V9 (Recolector Masivo)...")
-    mercadona, _ = Supermercado.objects.get_or_create(nombre="Mercadona")
+    print("🤖 Scraper Mercadona V3 (Smart Match + Sal)...")
+    mercadona, _ = Supermercado.objects.get_or_create(nombre="Mercadona", defaults={'color_brand': '#007A3E'})
     ingredientes = IngredienteBase.objects.all()
-    
-    total_guardados = 0
+
+    total_importados = 0
 
     for ing in ingredientes:
+        # Buscar ID de categoría
         cat_id = None
-        for k, v in MAPA_CATEGORIAS.items():
+        for k, v in MAPA_CATEGORIAS_IDS.items():
             if k in ing.nombre.lower():
                 cat_id = v
                 break
         
-        if not cat_id:
-            print(f"⏩ {ing.nombre}: Sin categoría.")
+        if not cat_id: 
+            print(f"⏩ Saltando {ing.nombre} (No mapeado en IDs)")
             continue
 
-        raw_products = obtener_productos_categoria(cat_id)
+        raw = obtener_productos(cat_id)
         
-        candidatos_validos = []
-        for p in raw_products:
-            if validar_basico(p['display_name'], ing.nombre):
-                candidatos_validos.append(p)
-
-        guardados_este_ingrediente = 0
-        print(f"🔎 {ing.nombre}: Encontrados {len(candidatos_validos)} candidatos...", end=" ")
-
-        for cand in candidatos_validos[:5]: # Guardamos TOP 5
+        # Filtrar candidatos
+        candidatos = []
+        for p in raw:
+            if cumple_criterios(p['display_name'], ing.nombre):
+                candidatos.append(p)
+        
+        # Guardar TOP 3 más baratos (para tener variedad)
+        count_ing = 0
+        for p in candidatos[:3]:
             try:
-                info = cand['price_instructions']
-                p_venta = Decimal(info['unit_price'])
-                p_ref = Decimal(info['reference_price'])
+                info = p['price_instructions']
+                precio = Decimal(info['unit_price'])
+                pum = Decimal(info['reference_price']) 
                 fmt = info['reference_format']
-                nombre_real = cand['display_name']
+                
+                # Cálculo Peso
+                peso_g = 1000
+                if pum > 0:
+                    ratio = float(precio) / float(pum)
+                    if fmt.lower() in ['kg', 'l']: peso_g = int(ratio * 1000)
+                    else: peso_g = int(ratio * 1000) # Fallback unidades
 
-                # Lógica de Unidades
-                tipo = 'KG'
-                if fmt.lower() in ['l', 'ml']: tipo = 'L'
-                elif fmt.lower() in ['ud', 'dc', 'st', 'unidad']: tipo = 'UD'
-
-                cant_pack = 1
-                if "huevos" in nombre_real.lower():
-                    tipo = 'UD'
-                    cant_pack = 12 if ("docena" in nombre_real.lower() or p_venta > 1.8) else 6
-                elif tipo == 'UD' and p_ref > 0:
-                    cant_pack = max(1, round(p_venta / p_ref))
-
-                # La lógica de peso se calcula automáticamente en models.py al guardar
-                prod, created = ProductoReal.objects.update_or_create(
-                    nombre_comercial=nombre_real,
+                ProductoReal.objects.update_or_create(
+                    nombre_comercial=p['display_name'],
                     supermercado=mercadona,
                     defaults={
                         "ingrediente_base": ing,
-                        "precio_actual": p_venta,
-                        "tipo_unidad": tipo,
-                        "precio_por_unidad_medida": p_ref,
-                        "cantidad_pack": cant_pack,
-                        "imagen_url": cand['thumbnail']
+                        "precio_actual": precio,
+                        "peso_gramos": peso_g,
+                        "precio_por_kg": pum if fmt == 'kg' else (precio / Decimal(peso_g/1000) if peso_g > 0 else 0),
+                        "imagen_url": p['thumbnail']
                     }
                 )
-                guardados_este_ingrediente += 1
-            except Exception as e:
-                pass
+                count_ing += 1
+            except: pass
         
-        if guardados_este_ingrediente > 0:
-            print(f"✅ {guardados_este_ingrediente}")
+        if count_ing > 0:
+            print(f"✅ {ing.nombre}: {count_ing} productos.")
         else:
-            print("❌ 0")
+            print(f"❌ {ing.nombre}: 0 productos encontrados (Revisar keywords).")
         
-        total_guardados += guardados_este_ingrediente
-        time.sleep(0.05)
+        total_importados += count_ing
+        time.sleep(0.1)
 
-    print(f"\n🏁 Fin. Total productos en BD: {total_guardados}")
+    print(f"\n🏁 Total Global: {total_importados} productos en BD.")
 
 if __name__ == "__main__":
     ejecutar_robot()
