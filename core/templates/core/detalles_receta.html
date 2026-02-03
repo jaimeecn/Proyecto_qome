@@ -34,13 +34,38 @@
         </div>
     </nav>
 
-    <div class="header-receta text-center">
+   <div class="header-receta text-center">
         <div class="container">
             <h1 class="display-5 fw-bold">{{ receta.titulo }}</h1>
-            <div class="mt-3 fs-5">
+            
+            <div class="mt-3 fs-5 mb-4">
                 <span class="badge bg-warning text-dark me-2">💰 {{ receta.precio_estimado }} €</span>
                 <span class="badge bg-light text-dark">⏱️ {{ receta.tiempo_preparacion }} min</span>
             </div>
+
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <div class="bg-white bg-opacity-25 rounded-3 p-2 d-flex justify-content-around text-white">
+                        <div class="text-center">
+                            <span class="d-block h4 fw-bold mb-0">{{ receta.calorias }}</span>
+                            <small class="text-uppercase" style="font-size: 0.7rem;">Kcal</small>
+                        </div>
+                        <div class="text-center border-start border-white border-opacity-25 ps-3">
+                            <span class="d-block h4 fw-bold mb-0">{{ receta.proteinas|floatformat:0 }}g</span>
+                            <small class="text-uppercase" style="font-size: 0.7rem;">Prot</small>
+                        </div>
+                        <div class="text-center border-start border-white border-opacity-25 ps-3">
+                            <span class="d-block h4 fw-bold mb-0">{{ receta.hidratos|floatformat:0 }}g</span>
+                            <small class="text-uppercase" style="font-size: 0.7rem;">Carbs</small>
+                        </div>
+                        <div class="text-center border-start border-white border-opacity-25 ps-3">
+                            <span class="d-block h4 fw-bold mb-0">{{ receta.grasas|floatformat:0 }}g</span>
+                            <small class="text-uppercase" style="font-size: 0.7rem;">Grasas</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 

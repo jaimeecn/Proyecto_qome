@@ -1,56 +1,60 @@
+import json
 from django.shortcuts import render, get_object_or_404, redirect
-from django.db.models import Q
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from .models import Receta, PerfilUsuario
+from django.db.models import Q
+from .models import Receta, PerfilUsuario, PlanSemanal, ComidaPlanificada
 
-# 1. VISTA: LISTA DE RECETAS (Con Buscador y Filtros)
-# Asegúrate de que 'PerfilUsuario' esté importado arriba junto a 'Receta'
-# from .models import Receta, PerfilUsuario 
+# REDIRECCIÓN RAÍZ
+def home(request):
+    if request.user.is_authenticated:
+        return redirect('plan_semanal')
+    else:
+        return redirect('login')
 
+# 1. VISTA: LISTA DE RECETAS (HOME)
 def lista_recetas(request):
     recetas = Receta.objects.all()
     perfil = None
-    limite_coste = 0 # Valor por defecto
+    metas = None
+    limite_coste = 0
 
-    # 1. INTELIGENCIA DE USUARIO
     if request.user.is_authenticated:
         try:
-            perfil = request.user.perfilusuario
+            perfil = PerfilUsuario.objects.get(usuario=request.user)
             
-            # FILTRADO INTELIGENTE (Horno, etc...)
-            if not perfil.tiene_horno:
-                recetas = recetas.exclude(es_apta_horno=True, es_apta_airfryer=False, es_apta_sarten=False, es_apta_microondas=False)
-            if not perfil.tiene_airfryer:
-                recetas = recetas.exclude(es_apta_airfryer=True, es_apta_horno=False, es_apta_sarten=False, es_apta_microondas=False)
-            if not perfil.tiene_microondas:
-                recetas = recetas.exclude(es_apta_microondas=True, es_apta_horno=False, es_apta_sarten=False, es_apta_airfryer=False)
+            # --- LECTURA DIRECTA DE MACROS (Calculados en models.py) ---
+            metas = {
+                'calorias': perfil.gasto_energetico_diario,
+                'proteinas': perfil.objetivo_proteinas,
+                'grasas': perfil.objetivo_grasas,
+                'hidratos': perfil.objetivo_hidratos,
+            }
 
-            # --- NUEVO CÁLCULO DE PRESUPUESTO ---
-            # Si tu presupuesto son 50€, tienes unos 3.5€ por comida (50 / 14 comidas)
-            # Todo lo que supere eso, lo marcaremos en amarillo.
+            # Filtros de Electrodomésticos
+            if not perfil.tiene_horno: recetas = recetas.exclude(es_apta_horno=True)
+            if not perfil.tiene_airfryer: recetas = recetas.exclude(es_apta_airfryer=True)
+            if not perfil.tiene_microondas: recetas = recetas.exclude(es_apta_microondas=True)
+
             if perfil.presupuesto_semanal > 0:
                 limite_coste = perfil.presupuesto_semanal / 14
 
         except PerfilUsuario.DoesNotExist:
             pass
 
-    # 2. BÚSQUEDA Y FILTROS MANUALES
+    # Filtros Manuales (Buscador)
     query = request.GET.get('q')
-    if query:
-        recetas = recetas.filter(titulo__icontains=query)
-
+    if query: recetas = recetas.filter(titulo__icontains=query)
     if request.GET.get('sarten'): recetas = recetas.filter(es_apta_sarten=True)
     if request.GET.get('airfryer'): recetas = recetas.filter(es_apta_airfryer=True)
-    if request.GET.get('microondas'): recetas = recetas.filter(es_apta_microondas=True)
     if request.GET.get('horno'): recetas = recetas.filter(es_apta_horno=True)
 
-    # Enviamos 'limite_coste' al HTML para que pueda comparar fácil
     return render(request, 'core/lista_recetas.html', {
         'recetas': recetas, 
-        'perfil': perfil,
-        'limite_coste': limite_coste 
+        'perfil': perfil, 
+        'metas': metas, 
+        'limite_coste': limite_coste
     })
 
 # 2. VISTA: DETALLE DE RECETA
@@ -58,39 +62,69 @@ def detalle_receta(request, receta_id):
     receta = get_object_or_404(Receta, id=receta_id)
     return render(request, 'core/detalle_receta.html', {'receta': receta})
 
-# 3. VISTA: REGISTRO DE USUARIO
+# 3. VISTA: REGISTRO
 def registro(request):
     if request.method == 'POST':
         form = UserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            login(request, user) # Logueamos al usuario directamente
-            return redirect('home')
+            login(request, user)
+            return redirect('plan_semanal')
     else:
         form = UserCreationForm()
-    
     return render(request, 'core/registro.html', {'form': form})
 
-# 4. VISTA: PERFIL DE USUARIO
+# 4. VISTA: PERFIL
 @login_required
 def perfil(request):
-    # Buscamos el perfil del usuario actual (o lo creamos si no existe)
-    perfil_usuario, created = PerfilUsuario.objects.get_or_create(user=request.user)
+    perfil_usuario, created = PerfilUsuario.objects.get_or_create(usuario=request.user)
 
     if request.method == 'POST':
-        # Guardamos los datos que vienen del formulario
-        perfil_usuario.presupuesto_semanal = request.POST.get('presupuesto')
+        perfil_usuario.genero = request.POST.get('genero')
+        perfil_usuario.edad = int(request.POST.get('edad') or 30)
+        perfil_usuario.altura_cm = int(request.POST.get('altura') or 170)
+        perfil_usuario.peso_kg = float(request.POST.get('peso') or 70)
+        perfil_usuario.nivel_actividad = request.POST.get('actividad')
+        perfil_usuario.objetivo = request.POST.get('objetivo')
         
-        # Checkboxes: Si no están marcados, no envían nada, así que comprobamos si están en POST
+        presupuesto = request.POST.get('presupuesto')
+        if presupuesto: perfil_usuario.presupuesto_semanal = float(presupuesto)
+        
         perfil_usuario.tiene_airfryer = 'airfryer' in request.POST
         perfil_usuario.tiene_horno = 'horno' in request.POST
         perfil_usuario.tiene_microondas = 'microondas' in request.POST
         
-        perfil_usuario.save() # Guardamos en la base de datos
-        
-        return render(request, 'core/perfil.html', {
-            'perfil': perfil_usuario, 
-            'mensaje': '¡Datos guardados correctamente!'
-        })
+        # Al guardar, el modelo recalculará los macros automáticamente
+        perfil_usuario.save()
+        return redirect('plan_semanal')
 
     return render(request, 'core/perfil.html', {'perfil': perfil_usuario})
+
+# 5. VISTA: VER PLAN SEMANAL
+@login_required
+def ver_plan_semanal(request):
+    plan = PlanSemanal.objects.filter(usuario=request.user).order_by('-fecha_inicio').first()
+    
+    dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    calendario = {i: {'nombre': dias_semana[i], 'comida': None, 'cena': None} for i in range(7)}
+    lista_compra_visual = {} 
+
+    if plan:
+        comidas = plan.comidas.all().select_related('receta')
+        for comida in comidas:
+            if comida.momento == 'COMIDA':
+                calendario[comida.dia_semana]['comida'] = comida.receta
+            elif comida.momento == 'CENA':
+                calendario[comida.dia_semana]['cena'] = comida.receta
+        
+        if plan.lista_compra_generada:
+            try:
+                lista_compra_visual = json.loads(plan.lista_compra_generada)
+            except json.JSONDecodeError:
+                lista_compra_visual = {}
+
+    return render(request, 'core/plan_semanal.html', {
+        'calendario': calendario,
+        'lista_compra': lista_compra_visual,
+        'plan': plan
+    })

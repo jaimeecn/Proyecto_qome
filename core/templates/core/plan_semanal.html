@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Mi Plan Semanal - QOME</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .card-dia { border-left: 5px solid #198754; transition: 0.2s; }
+        .card-dia:hover { transform: translateX(5px); }
+    </style>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-dark bg-success mb-4 shadow">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="{% url 'home' %}">🥦 QOME</a>
+            <span class="text-white">Planificador V2</span>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        {% if plan %}
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="fw-bold text-dark mb-0">📅 Menú Semanal</h2>
+                <span class="badge bg-warning text-dark">Generado: {{ plan.fecha_inicio }}</span>
+            </div>
+
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="row row-cols-1 g-3">
+                        {% for dia_num, datos in calendario.items %}
+                        <div class="col">
+                            <div class="card card-dia shadow-sm border-0 h-100">
+                                <div class="card-body py-3">
+                                    <div class="row align-items-center">
+                                        <div class="col-2 text-center border-end">
+                                            <h5 class="fw-bold text-success text-uppercase mb-0">{{ datos.nombre|slice:":3" }}</h5>
+                                        </div>
+                                        <div class="col-10">
+                                            <div class="row g-2">
+                                                <div class="col-md-6">
+                                                    <small class="text-muted fw-bold">🌞 COMIDA</small>
+                                                    <div class="border rounded p-2 bg-white text-truncate">
+                                                        {% if datos.comida %}🍲 {{ datos.comida.titulo }}
+                                                        {% else %}<span class="text-muted fst-italic">Libre</span>{% endif %}
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <small class="text-muted fw-bold">🌙 CENA</small>
+                                                    <div class="border rounded p-2 bg-white text-truncate">
+                                                        {% if datos.cena %}🥗 {{ datos.cena.titulo }}
+                                                        {% else %}<span class="text-muted fst-italic">Libre</span>{% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="card shadow border-0 sticky-top" style="top: 20px;">
+                        <div class="card-header bg-dark text-white fw-bold py-3">
+                            🛒 Lista de Compra
+                        </div>
+                        <div class="card-body p-0" style="max-height: 80vh; overflow-y: auto;">
+                            <ul class="list-group list-group-flush">
+                                {% for nombre, info in lista_compra.items %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="fw-bold">{{ nombre }}</div>
+                                        <small class="text-muted">{{ info.categoria }}</small>
+                                    </div>
+                                    <span class="badge bg-primary rounded-pill">
+                                        {{ info.unidades }}x 
+                                        {% if info.formato_visual == 'UD' %}
+                                            Pack de {{ info.cantidad_por_pack|floatformat:0 }} uds.
+                                        {% elif info.formato_visual == 'L' %}
+                                            Botella/Brick
+                                        {% else %}
+                                            {% if info.peso_total_g >= 1000 %}
+                                                Paquete 1kg
+                                            {% else %}
+                                                Bandeja {{ info.peso_total_g }}g
+                                            {% endif %}
+                                        {% endif %}
+                                    </span>
+                                </li>
+                                {% empty %}
+                                <li class="list-group-item text-center py-4 text-muted">Lista vacía.</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <h3>🚫 Sin plan activo</h3>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
