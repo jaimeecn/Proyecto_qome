@@ -3,8 +3,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
-from .models import Receta, PerfilUsuario, PlanSemanal, ComidaPlanificada
+from django.db.models import Min, Q
+from .models import Receta, PerfilUsuario, PlanSemanal, Supermercado
 
 # REDIRECCIÓN RAÍZ
 def home(request):
@@ -13,7 +13,7 @@ def home(request):
     else:
         return redirect('login')
 
-# 1. VISTA: LISTA DE RECETAS (HOME)
+# 1. VISTA: LISTA DE RECETAS (Con Precio Dinámico)
 def lista_recetas(request):
     recetas = Receta.objects.all()
     perfil = None
@@ -23,8 +23,24 @@ def lista_recetas(request):
     if request.user.is_authenticated:
         try:
             perfil = PerfilUsuario.objects.get(usuario=request.user)
-            
-            # --- LECTURA DIRECTA DE MACROS (Calculados en models.py) ---
+            mis_supers = perfil.supermercados_seleccionados.all()
+
+            # --- LÓGICA DE PRECIOS V2 ---
+            # Si el usuario tiene supermercados, calculamos el precio mínimo en ELLOS.
+            if mis_supers.exists():
+                recetas = recetas.annotate(
+                    precio_usuario=Min(
+                        'costes_por_supermercado__coste',
+                        filter=Q(costes_por_supermercado__supermercado__in=mis_supers)
+                    )
+                )
+            else:
+                # Si no tiene súper seleccionado, mostramos el mínimo global
+                recetas = recetas.annotate(
+                    precio_usuario=Min('costes_por_supermercado__coste')
+                )
+
+            # --- MACROS ---
             metas = {
                 'calorias': perfil.gasto_energetico_diario,
                 'proteinas': perfil.objetivo_proteinas,
@@ -42,6 +58,9 @@ def lista_recetas(request):
 
         except PerfilUsuario.DoesNotExist:
             pass
+    else:
+        # Usuario anónimo: Precio mínimo global
+        recetas = recetas.annotate(precio_usuario=Min('costes_por_supermercado__coste'))
 
     # Filtros Manuales (Buscador)
     query = request.GET.get('q')
@@ -60,7 +79,16 @@ def lista_recetas(request):
 # 2. VISTA: DETALLE DE RECETA
 def detalle_receta(request, receta_id):
     receta = get_object_or_404(Receta, id=receta_id)
-    return render(request, 'core/detalle_receta.html', {'receta': receta})
+    
+    # Obtener desglose de precios por súper para mostrar comparativa
+    # Solo mostramos los que son "posibles" (tienen todos los ingredientes)
+    costes = receta.costes_por_supermercado.filter(es_posible=True).select_related('supermercado').order_by('coste')
+    
+    # NOTA: Asegúrate de que el template se llame 'detalles_receta.html' o ajusta aquí el nombre
+    return render(request, 'core/detalles_receta.html', {
+        'receta': receta,
+        'costes': costes
+    })
 
 # 3. VISTA: REGISTRO
 def registro(request):
@@ -68,8 +96,9 @@ def registro(request):
         form = UserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
+            PerfilUsuario.objects.create(usuario=user)
             login(request, user)
-            return redirect('plan_semanal')
+            return redirect('perfil') 
     else:
         form = UserCreationForm()
     return render(request, 'core/registro.html', {'form': form})
@@ -78,6 +107,7 @@ def registro(request):
 @login_required
 def perfil(request):
     perfil_usuario, created = PerfilUsuario.objects.get_or_create(usuario=request.user)
+    todos_supers = Supermercado.objects.all()
 
     if request.method == 'POST':
         perfil_usuario.genero = request.POST.get('genero')
@@ -94,11 +124,17 @@ def perfil(request):
         perfil_usuario.tiene_horno = 'horno' in request.POST
         perfil_usuario.tiene_microondas = 'microondas' in request.POST
         
-        # Al guardar, el modelo recalculará los macros automáticamente
+        # Guardar Supermercados
+        supers_ids = request.POST.getlist('supermercados')
+        perfil_usuario.supermercados_seleccionados.set(supers_ids)
+        
         perfil_usuario.save()
         return redirect('plan_semanal')
 
-    return render(request, 'core/perfil.html', {'perfil': perfil_usuario})
+    return render(request, 'core/perfil.html', {
+        'perfil': perfil_usuario,
+        'supermercados': todos_supers
+    })
 
 # 5. VISTA: VER PLAN SEMANAL
 @login_required
@@ -117,9 +153,22 @@ def ver_plan_semanal(request):
             elif comida.momento == 'CENA':
                 calendario[comida.dia_semana]['cena'] = comida.receta
         
+        # Procesar JSON de compra para la vista agrupada
         if plan.lista_compra_generada:
             try:
-                lista_compra_visual = json.loads(plan.lista_compra_generada)
+                raw_lista = json.loads(plan.lista_compra_generada)
+                # Agrupar por supermercado: { 'Mercadona': [item1, item2], 'Lidl': [...] }
+                lista_agrupada = {}
+                for nombre_prod, datos in raw_lista.items():
+                    super_nombre = datos.get('super', 'Otros')
+                    if super_nombre not in lista_agrupada:
+                        lista_agrupada[super_nombre] = []
+                    
+                    datos['nombre'] = nombre_prod
+                    lista_agrupada[super_nombre].append(datos)
+                
+                lista_compra_visual = lista_agrupada
+
             except json.JSONDecodeError:
                 lista_compra_visual = {}
 
