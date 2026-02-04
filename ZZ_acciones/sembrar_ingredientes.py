@@ -2,6 +2,7 @@ import os
 import django
 import sys
 
+# SETUP DJANGO
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'qome_backend.settings')
 django.setup()
@@ -9,44 +10,47 @@ django.setup()
 from core.models import IngredienteBase
 
 def sembrar():
-    print("🌱 Sembrando Despensa Maestra...")
+    print("🌱 Sembrando Despensa Maestra Expandida...")
     
-    # Lista Maestra: (Nombre, Categoría)
-    # No ponemos macros exactos ahora (0 por defecto), se pueden refinar luego.
+    # Lista (Nombre, Categoría)
     lista = [
         # CARNICERÍA
         ('Pechuga de Pollo', 'Carniceria'), ('Carne Picada Vacuno', 'Carniceria'), 
         ('Lomo de Cerdo', 'Carniceria'), ('Jamón Serrano', 'Carniceria'),
-        ('Pavo en Lonchas', 'Carniceria'), ('Salchichas Pollo', 'Carniceria'),
+        ('Pavo en Lonchas', 'Carniceria'), ('Salchichas', 'Carniceria'),
+        ('Bacon', 'Carniceria'), ('Conejo', 'Carniceria'),
 
         # PESCADERÍA
-        ('Salmón Fresco', 'Pescaderia'), ('Merluza', 'Pescaderia'), 
+        ('Salmón', 'Pescaderia'), ('Merluza', 'Pescaderia'), 
         ('Atún Lata', 'Pescaderia'), ('Gambas', 'Pescaderia'), ('Bacalao', 'Pescaderia'),
+        ('Sepia', 'Pescaderia'), ('Dorada', 'Pescaderia'),
 
         # FRUTA Y VERDURA
         ('Plátano', 'Fruta'), ('Manzana', 'Fruta'), ('Naranja', 'Fruta'), 
         ('Fresas', 'Fruta'), ('Limón', 'Fruta'), ('Aguacate', 'Verdura'),
-        ('Lechuga Iceberg', 'Verdura'), ('Tomate', 'Verdura'), ('Cebolla', 'Verdura'),
+        ('Lechuga', 'Verdura'), ('Tomate', 'Verdura'), ('Cebolla', 'Verdura'),
         ('Ajo', 'Verdura'), ('Pimiento Rojo', 'Verdura'), ('Pimiento Verde', 'Verdura'),
         ('Calabacín', 'Verdura'), ('Zanahoria', 'Verdura'), ('Espinacas', 'Verdura'),
-        ('Patata', 'Verdura'), ('Champiñones', 'Verdura'),
+        ('Patata', 'Verdura'), ('Champiñones', 'Verdura'), ('Brócoli', 'Verdura'),
+        ('Pepino', 'Verdura'), ('Berenjena', 'Verdura'),
 
         # LÁCTEOS Y HUEVOS
         ('Leche Entera', 'Lacteos'), ('Leche Semidesnatada', 'Lacteos'), 
         ('Yogur Natural', 'Lacteos'), ('Yogur Griego', 'Lacteos'), ('Queso Batido', 'Lacteos'),
-        ('Queso Mozzarella', 'Lacteos'), ('Queso Rallado', 'Lacteos'), ('Mantequilla', 'Lacteos'),
-        ('Huevos L', 'Huevos'), ('Claras de Huevo', 'Huevos'),
+        ('Mozzarella', 'Lacteos'), ('Queso Rallado', 'Lacteos'), ('Mantequilla', 'Lacteos'),
+        ('Huevos', 'Huevos'), ('Nata Cocinar', 'Lacteos'), ('Queso Fresco', 'Lacteos'),
 
         # DESPENSA
-        ('Arroz Redondo', 'Despensa'), ('Pasta Macarrones', 'Despensa'), ('Espaguetis', 'Despensa'),
-        ('Pan de Molde', 'Despensa'), ('Pan Integral', 'Despensa'), ('Avena', 'Despensa'),
-        ('Harina de Trigo', 'Despensa'), ('Azúcar', 'Despensa'), ('Sal Fina', 'Despensa'),
-        ('Aceite de Oliva', 'Despensa'), ('Aceite de Girasol', 'Despensa'), ('Vinagre', 'Despensa'),
-        ('Tomate Frito', 'Despensa'), ('Mayonesa', 'Despensa'),
-        ('Café Molido', 'Despensa'), ('Cacao en Polvo', 'Despensa'),
+        ('Arroz', 'Despensa'), ('Macarrones', 'Despensa'), ('Espaguetis', 'Despensa'),
+        ('Pan Molde', 'Despensa'), ('Pan Integral', 'Despensa'), ('Avena', 'Despensa'),
+        ('Harina Trigo', 'Despensa'), ('Azúcar', 'Despensa'), ('Sal', 'Despensa'),
+        ('Aceite Oliva', 'Despensa'), ('Aceite Girasol', 'Despensa'), ('Vinagre', 'Despensa'),
+        ('Tomate Frito', 'Despensa'), ('Mayonesa', 'Despensa'), ('Ketchup', 'Despensa'),
+        ('Café', 'Despensa'), ('Cacao Polvo', 'Despensa'), ('Lentejas Bote', 'Despensa'),
+        ('Garbanzos Bote', 'Despensa'), ('Maíz Dulce', 'Despensa'),
         
-        # ESPECIAS (Importante para que no falle al buscar "Orégano")
-        ('Orégano', 'Despensa'), ('Pimentón', 'Despensa'), ('Pimienta Negra', 'Despensa'),
+        # ESPECIAS
+        ('Orégano', 'Despensa'), ('Pimentón', 'Despensa'), ('Pimienta', 'Despensa'),
         ('Canela', 'Despensa'), ('Comino', 'Despensa')
     ]
 
